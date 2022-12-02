@@ -1,0 +1,89 @@
+##R/python 
+##single cell data of ESCC
+##step x: cell-cell communication analysis by CellPhoneDB
+##Jiacheng Dai #daicy0424@gmail.com
+##2022/12/1
+
+
+#1 extract Seurat object
+library(Seurat)
+
+meta1 = read.csv("01ECatlas/01total_cluster/01ESCCdataset_Meta.csv",header=T,row.names=1)
+clusters.T = meta1[meta1$seurat_clusters %in% c(0,2,21,23,24,26,28),]
+clusters.T$celltype = "T cell"
+clusters.F = meta1[meta1$seurat_clusters %in% c(4,5,6,10,11,29,38),]
+clusters.F$celltype = "Fibroblast"
+
+meta2 = read.csv("01ECatlas/02EC_cluster/02ECdataset_Meta.csv",header=T,row.names=1)
+meta = meta2[meta2$Doublet=="Singlet",]
+list_cluster1 = c(0,2,4,10,12,14,16,22,8,9,3,19,24,5,6,13,1)
+list_cluster2 = c("HLA+ vein","RGCC+ EC","CCL2+ vein","CPE+ vein","ISG15+ vein","HSP+ EC","ACTG1+ vein","SELE+ vein","FABP4+ EC", "SOCS3+ EC","COL4A1+ TEC","APLNR+ TEC","TOP2A+ TEC","JAG1+ artery","CAV1+ cap","MGP+ artery","Qsc EC")
+meta.1 = meta[meta$seurat_clusters_EC == list_cluster1[1],]
+meta.1$celltype = list_cluster2[1]
+meta.2 = meta[meta$seurat_clusters_EC == list_cluster1[2],]
+meta.2$celltype = list_cluster2[2]
+meta.3 = meta[meta$seurat_clusters_EC == list_cluster1[3],]
+meta.3$celltype = list_cluster2[3]
+meta.4 = meta[meta$seurat_clusters_EC == list_cluster1[4],]
+meta.4$celltype = list_cluster2[4]
+meta.5 = meta[meta$seurat_clusters_EC == list_cluster1[5],]
+meta.5$celltype = list_cluster2[5]
+meta.6 = meta[meta$seurat_clusters_EC == list_cluster1[6],]
+meta.6$celltype = list_cluster2[6]
+meta.7 = meta[meta$seurat_clusters_EC == list_cluster1[7],]
+meta.7$celltype = list_cluster2[7]
+meta.8 = meta[meta$seurat_clusters_EC == list_cluster1[8],]
+meta.8$celltype = list_cluster2[8]
+meta.9 = meta[meta$seurat_clusters_EC == list_cluster1[9],]
+meta.9$celltype = list_cluster2[9]
+meta.10 = meta[meta$seurat_clusters_EC == list_cluster1[10],]
+meta.10$celltype = list_cluster2[10]
+meta.11 = meta[meta$seurat_clusters_EC == list_cluster1[11],]
+meta.11$celltype = list_cluster2[11]
+meta.12 = meta[meta$seurat_clusters_EC == list_cluster1[12],]
+meta.12$celltype = list_cluster2[12]
+meta.13 = meta[meta$seurat_clusters_EC == list_cluster1[13],]
+meta.13$celltype = list_cluster2[13]
+meta.14 = meta[meta$seurat_clusters_EC == list_cluster1[14],]
+meta.14$celltype = list_cluster2[14]
+meta.15 = meta[meta$seurat_clusters_EC == list_cluster1[15],]
+meta.15$celltype = list_cluster2[15]
+meta.16 = meta[meta$seurat_clusters_EC == list_cluster1[16],]
+meta.16$celltype = list_cluster2[16]
+meta.17 = meta[meta$seurat_clusters_EC == list_cluster1[17],]
+meta.17$celltype = list_cluster2[17]
+
+meta_new = rbind(meta.1, meta.2, meta.3, meta.4, meta.5, meta.6, meta.7, meta.8, meta.9, meta.10, meta.11, meta.12, meta.13, meta.14, meta.15, meta.16, meta.17)
+meta_new = meta_new[,-12:-13]
+meta_total = rbind(clusters.T, clusters.F, meta_new)
+
+meta_x = meta_total[,c(4,12)]
+colnames(meta_x) = c("tissue_type","cell_type")
+meta.tumor<-meta_x[which(meta_x$tissue_type=="Tumor"),]
+meta.peri<-meta_x[which(meta_x$tissue_type=="Peri"),]
+meta.normal<-meta_x[which(meta_x$tissue_type=="Normal"),]
+write.table(meta.tumor, "01ECatlas/07cellphonedb/cellphonedb_meta_tumor.txt",sep='\t',quote=F, row.names=F)
+write.table(meta.peri, "01ECatlas/07cellphonedb/cellphonedb_meta_peri.txt",sep='\t',quote=F, row.names=F)
+write.table(meta.normal, "01ECatlas/07cellphonedb/cellphonedb_meta_normal.txt",sep='\t',quote=F, row.names=F)
+
+data = readRDS("01ECatlas/01total_cluster/01ESCCdataset.sct.rds")
+data.matrix<-data@assays$SCT@data
+data.matrix.tumor<-data.matrix[,rownames(meta.tumor)]
+data.matrix.peri<-data.matrix[,rownames(meta.peri)]
+data.matrix.normal<-data.matrix[,rownames(meta.normal)]
+gene = rownames(data.matrix.tumor)
+rt1 = cbind(gene,as.matrix(data.matrix.tumor))
+write.table(rt1,"01ECatlas/07cellphonedb/cellphonedb_count_tumor.txt",sep='\t',quote=F,row.names=F,col.names=T)
+gene = rownames(data.matrix.peri)
+rt2 = cbind(gene,as.matrix(data.matrix.peri))
+write.table(rt2,"01ECatlas/07cellphonedb/cellphonedb_count_peri.txt",sep='\t',quote=F,row.names=F,col.names=T)
+gene = rownames(data.matrix.normal)
+rt3 = cbind(gene,as.matrix(data.matrix.normal))
+write.table(rt3,"01ECatlas/07cellphonedb/cellphonedb_count_normal.txt",sep='\t',quote=F,row.names=F,col.names=T)
+
+##4 cellphoneDB
+cellphonedb method statistical_analysis cellphonedb_meta_normal.txt cellphonedb_count_normal.txt --threads 32 --counts-data gene_name
+cellphonedb plot dot_plot
+cellphonedb plot heatmap_plot cellphonedb_meta_normal.txt
+
+
