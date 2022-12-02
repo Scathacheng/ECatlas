@@ -1,0 +1,397 @@
+##R 
+##single cell data of ESCC
+##step2: EC sub-cluster
+##Jiacheng Dai #daicy0424@gmail.com
+##2022/07/10
+
+library(dplyr)
+library(Seurat)
+library(patchwork)
+library(Matrix)
+library(DoubletFinder)
+
+#load data 
+setwd("01ECatlas/02EC_cluster")
+data = readRDS("../01total_cluster/01ESCCdataset.sct.rds")
+ec_table = data[[]]
+ec_table = ec_table[ec_table$seurat_clusters %in% c(3,9,31,50,51),]
+data.matrix = data@assays$RNA@counts[,rownames(ec_table)]
+#dim(data.matrix) 28900 46281
+
+data.ec <- CreateSeuratObject(counts = data.matrix,
+                        project = "endothelial cells",
+                        min.cells = 3,
+                        min.features = 0)
+data.ec[["percent.mt"]] <- PercentageFeatureSet(data.ec, pattern = "MT-")
+options(future.globals.maxSize = 2000 * 1024^2)
+data.ec <- SCTransform(data.ec, vars.to.regress = "percent.mt", verbose = T)
+
+#clustering
+data.ec = RunPCA(data.ec)
+data.ec = RunUMAP(data.ec, dims = 1:30)
+data.ec = RunTSNE(data.ec, dims = 1:30)
+
+data.ec = FindNeighbors(data.ec, dims = 1:30) 
+data.ec = FindClusters(data.ec, resolution = 1) 
+
+saveRDS(data.ec,"02ECdataset.sct.rds")
+
+#plot 
+pdf("02EC_umap.pdf",w=12,h=10)
+DimPlot(data.ec, reduction = "umap", group.by = "seurat_clusters", label=TRUE, pt.size = 0.5)
+dev.off()
+pdf("02EC_tsne.pdf",w=12,h=10)
+DimPlot(data.ec, reduction = "tsne", group.by = "seurat_clusters", label=TRUE, pt.size = 0.5)
+dev.off()
+
+#Find cluster biomarkers
+cluster.markers = FindAllMarkers(data.ec,
+                                only.pos=TRUE,
+                                min.pct=0.25,
+                                logfc.threshold=0.5)
+write.csv(cluster.markers,file="02ECdataset_Markers.csv")
+
+#FeaturePlot
+pdf("FeaturePlot/02EC_HSPG2.umap.pdf",w=6,h=5)
+FeaturePlot(data,features=c("HSPG2"))
+dev.off()
+pdf("FeaturePlot/02EC_INSR.umap.pdf",w=6,h=5)
+FeaturePlot(data,features=c("INSR"))
+dev.off()
+pdf("FeaturePlot/02EC_COL4A1.umap.pdf",w=12,h=5)
+FeaturePlot(data,features=c("COL4A1","COL4A2"))
+dev.off()
+pdf("FeaturePlot/02EC_GJA5.umap.pdf",w=6,h=5)
+FeaturePlot(data,features=c("GJA5"))
+dev.off()
+pdf("FeaturePlot/02EC_ACKR1.umap.pdf",w=6,h=5)
+FeaturePlot(data,features=c("ACKR1"))
+dev.off()
+pdf("FeaturePlot/02EC_CA4.umap.pdf",w=6,h=5)
+FeaturePlot(data,features=c("CA4"))
+dev.off()
+pdf("FeaturePlot/02EC_PROX1.umap.pdf",w=6,h=5)
+FeaturePlot(data,features=c("PROX1"))
+dev.off()
+pdf("FeaturePlot/02EC_PECAM1.umap.pdf",w=6,h=5)
+FeaturePlot(data,features=c("PECAM1"))
+dev.off()
+
+#Dotplot
+library(Seurat)
+library(tidyverse)
+library(ggdendro)
+library(cowplot)
+library(patchwork)
+#rm(list=ls())
+data=readRDS("02ECdataset.sct.rds")
+#arterial, h=8, w=8
+cd_gene<-c("SOX17","EFNB2","GJA5","JAG1","DEPP1","CXCL12","FBLN2","LTBP4","FN1","MGP","SERPINE2","CAV1","CTGF")
+#vein, h=8, w=10.5
+cd_gene<-c("ACKR1","VWF","ACKR3","HLA-DRB1","HLA-DRB5","CCL2","POSTN","IL6","NNMT","IL1R1","CLU","CPE","ISG15","IFI44L","ACTG1","CYR61","SELE","SELP","ICAM1","VCAM1")
+#LEC, h=5, w=7
+cd_gene<-c("PROX1","LYVE1","CCL21","TFF3","RELN","MMRN1","FLT4","TBX1")
+#capillary, h=8, w=7
+cd_gene<-c("CA4","CAV1","CAV2","FABP5","RGCC","CXCL2","CAVIN2","TAGLN")
+#TEC, h=8, w=9.5
+cd_gene<-c("COL4A1","COL4A2","COL15A1","SPARC","INSR","HSPG2","NOTCH4","PLVAP","IGFBP5","APLNR","PMEPA1","NEAT1","SERPINH1","VWA1","TOP2A","CENPF")
+#otherEC1, h=8, w=10
+cd_gene<-c("TSC22D1","RGCC","TXNIP","FABP4","FABP5","RBP7","GSN","SOCS3","FOS","JUNB","JUND","JUN","SLC2A3","HSPA1A","HSPA1B")
+#otherEC2, h=6, w=10
+cd_gene<-c("KRT13","S100A9","DCN","CFD","COL1A1","COL1A2","CCL5","CXCR4","NKG7","ACTA2","RGS5","TAGLN","CD79A","MS4A1","C1QA","C1QB")
+#other3, h=8, w=10
+cd_gene<-c("SOX17","EFNB2","GJA5","ACKR1","VWF","CLU","CAV1","CA4","ENG","HSPG2","INSR","PLVAP","CXCR4","CCL21","LYVE1","PROX1")
+#C23, h=8, w=8
+cd_gene<-c("C1QA","C1QB","C1QC","LYZ","CD163","AIF1","MS4A4A","MS4A6A")
+#C21
+cd_gene<-c("CCL5","CCL4","IL7R","CD3D","NKG7","CD37","MS4A1","CD79A","LTB","CXCR4","CD52","CD48","CD53","CD69")
+
+#plot
+data.usage = DotPlot(data,features=cd_gene)$data
+data.usage$id = factor(data.usage$id, levels=c(5,13,0,4,10,12,16,22,6,3,19,24,7,11,1,2,8,9,14,15,17,18,20,21,23))
+levels(data.usage$id) = c("JAG1+ artery (C5)","MGP+ artery (C13)","HLA+ vein (C0)","CCL2+ vein (C4)","CPE+ vein (C10)","ISG15+ vein (C12)","ACTG1+ vein (C16)","SELE+ vein (C22)","CAV1+ capillary (C6)","COL4A1+ TEC (C3)","APLNR+ TEC (C19)","TOP2A+ TEC (C24)","LYVE1+ LEC (C7)","ANGPT2+ LEC (C11)","Qsc EC (C1)","RGCC+ EC (C2)","FABP4+ EC (C8)","SOCS3+ EC (C9)","HSP+ EC (C14)","KRT+ EC (C15)","Fibroblast-like (C17)","Immune cell-like (C18)","SMC-like (C20)","B cell-like (C21)","Macrophage-like (C23)")
+
+pdf("dotplot_other3.pdf",h=8,w=10)
+data.usage %>% filter(avg.exp.scaled > 0) %>%
+ggplot(aes(x=features.plot, y=id, color=avg.exp.scaled, size=pct.exp)) +
+geom_point() +
+scale_size("% detected", range=c(0,10)) +
+cowplot::theme_cowplot() +
+theme(axis.line = element_blank()) +
+theme(axis.text.x = element_text(angle=90, vjust=0.5, hjust=1)) +
+ylab('') +
+theme(axis.ticks = element_blank()) +
+scale_color_gradientn(colours=viridis::viridis(20), limits=c(0,3))
+dev.off()
+
+
+
+#violin plot in supplementary figure 4d
+pdf("DotPlot/Vlnplot.pdf",height=7,width=20)
+VlnPlot(data, features = c("nFeature_RNA", "nCount_RNA", "percent.mt"), ncol = 3, pt.size = 0)
+dev.off()
+
+#Doublet Finder
+sweep.res.list.ec = paramSweep_v3(data.ec, PCs = 1:30, sct = TRUE)
+sweep.stats.ec = summarizeSweep(sweep.res.list.ec, GT = FALSE)
+bcmvn.ec = find.pK(sweep.stats.ec)
+pK_value = as.numeric(as.character(bcmvn.ec$pK[bcmvn.ec$BCmetric == max(bcmvn.ec$BCmetric)]))
+annotations = data.ec@meta.data$SCT_snn_res.1
+homotypic.prop = modelHomotypic(annotations)
+nExp_poi = round(0.075*nrow(data.ec@meta.data))
+nExp_poi.adj = round(nExp_poi*(1-homotypic.prop))
+pN_value = 0.25
+pANN_value = paste0("pANN_",pN_value,"_",pK_value,'_',nExp_poi)
+data.ec <- doubletFinder_v3(data.ec, PCs = 1:30, pN = pN_value, pK = pK_value, nExp = nExp_poi, reuse.pANN = FALSE, sct = TRUE)  #dim
+data.ec <- doubletFinder_v3(data.ec, PCs = 1:30, pN = pN_value, pK = pK_value, nExp = nExp_poi.adj, reuse.pANN = pANN_value, sct = TRUE)  #dim
+df.classifications = paste("DF.classifications", pN_value, pK_value, nExp_poi.adj, sep="_")
+data.ec@meta.data$Doublet <- data.ec@meta.data[ ,df.classifications]
+
+saveRDS(data.ec,"02ECdataset.sct.rds")
+
+##cell proportion plot
+meta = read.csv("../01total_cluster/01ESCCdataset_Meta.csv",header=T,row.names=1)
+meta = meta[colnames(data),]
+meta$seurat_clusters_EC = data$seurat_clusters 
+meta$Doublet = data$Doublet
+write.csv(meta,"02ECdataset_Meta.csv")
+
+library(ggplot2)
+library(reshape2)
+
+#1 cluster vs tissue type
+rm(list=ls())
+options(stringsAsFactors=TRUE)
+meta = read.csv("02ECdataset_Meta.csv",header=T,row.names=1)
+proplist = matrix(NA,nrow=25,ncol=3)
+list1 = c(0:24)
+j = 1
+for (i in list1) {
+     meta1 = meta[meta$seurat_clusters_EC==i,]
+     proplist[j,] = table(meta1$type)
+	   j = j+1
+}
+colnames(proplist) = c("Distant","Adjacent","Tumor")
+rownames(proplist) = paste0("ECcluster",c(0:24))
+proplist2 = melt(proplist)
+colnames(proplist2) = c("seurat_clusters","Type","value")
+proplist2$value = as.numeric(proplist2$value)
+p <- ggplot(data=proplist2,aes(x=seurat_clusters,y=value,fill=Type))+
+     geom_bar(stat="identity")+
+     theme_minimal()+
+     scale_fill_manual(values=c("#008000","#0000FF","#ff0000"))+
+     theme(axis.text.x = element_text(angle = 30, hjust = 1, vjust = 1))
+pdf("ECpropplot/cellabsvalue_cluster_vs_type.pdf",h=5,w=7)
+p
+dev.off()
+
+p <- ggplot(data=proplist2,aes(x=seurat_clusters,y=value,fill=Type))+
+     geom_bar(stat="identity",position="fill")+
+     theme_minimal()+
+     scale_fill_manual(values=c("#008000","#0000FF","#ff0000"))+
+     theme(axis.text.x = element_text(angle = 30, hjust = 1, vjust = 1))
+pdf("ECpropplot/cellprop_cluster_vs_type.pdf",h=5,w=7)
+p
+dev.off()
+
+#2 cluster vs patient ID
+rm(list=ls())
+options(stringsAsFactors=TRUE)
+meta = read.csv("02ECdataset_Meta.csv",header=T,row.names=1)
+meta = meta[meta$Doublet=="Singlet",]
+
+proplist = data.frame()
+clusters = c(0:24)
+IDs = c("p001","p002","p013","p014","p015","p021","p022","p025","p026","p034","p036","p037","p041","p045","p047","p048","p049","p050","p054","p055")
+type = c("Tumor","Peri","Normal")
+j=1
+for (a in clusters) {
+     for (b in IDs) {
+          for (d in type) {
+               meta1 = meta[which(meta$seurat_clusters_EC==a & meta$Patient_ID==b & meta$type==d),]
+               proplist[j,1:4] = c(a,b,d,nrow(meta1))
+               j=j+1
+          }
+     }
+}
+colnames(proplist) = c("ECcluster","PatientID","TissueType","CellNumbers")
+write.csv(proplist,"ECpropplot/02ECdataset_cellprop_Cluster_ID_Type.csv")
+
+#statistical analysis
+#1 normalize cell number
+proplist$CellNumbers = as.numeric(proplist$CellNumbers)
+clusters = c(0:24)
+IDs = c("p001","p002","p013","p014","p015","p021","p022","p025","p026","p034","p036","p037","p041","p045","p047","p048","p049","p050","p054","p055")
+type = c("Tumor","Peri","Normal")
+for (a in type) {
+     for (b in IDs) {
+          proplist1 = proplist[which(proplist$PatientID==b & proplist$TissueType==a),]
+          i = sum(proplist1$CellNumbers)
+          for (d in clusters) {
+               proplist[proplist$PatientID==b & proplist$TissueType==a & proplist$ECcluster==d,5] = proplist[proplist$PatientID==b & proplist$TissueType==a & proplist$ECcluster==d,4]/i
+          }
+     }
+}
+colnames(proplist)[5] = "normCellProp"
+
+#2 t test and wilcox test
+statistic = data.frame()
+j=1
+for (a in clusters) {
+     proplist_C = proplist[proplist$ECcluster==a,]
+     proplist_C_T = proplist_C[proplist_C$TissueType=="Tumor",]
+     proplist_C_D = proplist_C[proplist_C$TissueType=="Normal",]
+     d = wilcox.test(proplist_C_T$normCellProp,proplist_C_D$normCellProp)
+     e = t.test(proplist_C_T$normCellProp,proplist_C_D$normCellProp,paired=TRUE, alternative="two.sided")
+     statistic[j,1:6] = c(a, "TumorvsDistant", d$statistic, d$p.value, e$statistic, e$p.value)
+     j=j+1
+}
+colnames(statistic) = c("ECcluster","Compare","Wilcox.stc", "Wilcox.p", "Ttest.stc", "Ttest.p")
+statistic$Wilcox.p = as.numeric(statistic$Wilcox.p)
+statistic$Wilcox.fdr = p.adjust(statistic$Wilcox.p,method="fdr")
+statistic$Ttest.p = as.numeric(statistic$Ttest.p)
+statistic$Ttest.fdr = p.adjust(statistic$Ttest.p,method="fdr")
+write.csv(statistic, "ECpropplot/02ECdataset_cellprop_statistic.csv")
+
+#3 histogram
+proplist$CellNumbers = as.numeric(proplist$CellNumbers)
+proplist$ECcluster = as.factor(proplist$ECcluster)
+levels(proplist$ECcluster) = c("HLA+ vein (C0)","Qsc EC (C1)","CPE+ vein (C10)","ANGPT2+ LEC (C11)","ISG15+ vein (C12)","MGP+ artery (C13)","HSP+ EC (C14)","KRT+ EC (C15)","ACTG1+ vein (C16)","Fibroblast-like (C17)","Immune cell-like (C18)","APLNR+ TEC (C19)","RGCC+ EC (C2)","SMC-like (C20)","B cell-like (C21)","SELE+ vein (C22)","Macrophage-like (C23)","TOP2A+ TEC (C24)","COL4A1+ TEC (C3)","CCL2+ vein (C4)","JAG1+ artery (C5)","CAV1+ capillary (C6)","LYVE1+ LEC (C7)","FABP4+ EC (C8)","SOCS3+ EC (C9)")
+proplist$TissueType = as.factor(proplist$TissueType)
+levels(proplist$TissueType) = c("Distant","Adjacent","Tumor")
+
+celltypelist = c("HLA+ vein (C0)","Qsc EC (C1)","CPE+ vein (C10)","ANGPT2+ LEC (C11)","ISG15+ vein (C12)","MGP+ artery (C13)","HSP+ EC (C14)","KRT+ EC (C15)","ACTG1+ vein (C16)","Fibroblast-like (C17)","Immune cell-like (C18)","APLNR+ TEC (C19)","RGCC+ EC (C2)","SMC-like (C20)","B cell-like (C21)","SELE+ vein (C22)","Macrophage-like (C23)","TOP2A+ TEC (C24)","COL4A1+ TEC (C3)","CCL2+ vein (C4)","JAG1+ artery (C5)","CAV1+ capillary (C6)","LYVE1+ LEC (C7)","FABP4+ EC (C8)","SOCS3+ EC (C9)")
+
+for (i in 1:25) {
+     proplist1 = proplist[proplist$ECcluster==celltypelist[i],]
+     p <- ggplot(data=proplist1,aes(x=PatientID,y=CellNumbers,fill=TissueType))+
+     geom_bar(stat="identity")+
+     theme_minimal()+
+     scale_fill_manual(values=c("#0000FF","#008000","#ff0000"))+
+     theme(axis.text.x = element_text(angle = 30, hjust = 1, vjust = 1))
+     pdf(paste0("cellprop_",celltypelist[i],".pdf"),h=5,w=8)
+     p
+     dev.off()
+}
+
+
+#histogram for signature genes' pathways
+library(clusterProfiler)
+library(org.Hs.eg.db)
+data=read.csv("02ECdataset_Markers.csv",header=T,row.names=1)
+
+
+#TEC C3 and C19
+####################################################################################################################
+c3=data[data$cluster==3,]
+go3=enrichGO(c3$gene, OrgDb = org.Hs.eg.db, ont='ALL',pAdjustMethod = 'BH',pvalueCutoff = 0.05, qvalueCutoff = 0.2,keyType = 'SYMBOL')
+value = -log10(go3$qvalue[1:5])
+pdf("GO_C3.pdf",h=4,w=5)
+barplot(value, col="#CF9400", horiz=TRUE, cex.names=0.8)
+dev.off()
+write.csv(go3, "GO_C3.csv")
+
+c19=data[data$cluster==19,]
+go19=enrichGO(c19$gene, OrgDb = org.Hs.eg.db, ont='ALL',pAdjustMethod = 'BH',pvalueCutoff = 0.05, qvalueCutoff = 0.2,keyType = 'SYMBOL')
+value = -log10(go19$qvalue[1:5])
+pdf("GO_C19.pdf",h=4,w=5)
+barplot(value, col="#CF78FF", horiz=TRUE, cex.names=0.8)
+dev.off()
+write.csv(go19, "GO_C19.csv")
+
+c22=data[data$cluster==22,]
+go22=enrichGO(c22$gene, OrgDb = org.Hs.eg.db, ont='ALL',pAdjustMethod = 'BH',pvalueCutoff = 0.05, qvalueCutoff = 0.2,keyType = 'SYMBOL')
+value = -log10(go22$qvalue[c(1,4,5,11,21)])
+pdf("GO_C22_2.pdf",h=4,w=5)
+barplot(value, col="#FF61C9", horiz=TRUE, cex.names=0.8)
+dev.off()
+write.csv(go22, "GO_C22.csv")
+
+c24=data[data$cluster==24,]
+go24=enrichGO(c24$gene, OrgDb = org.Hs.eg.db, ont='ALL',pAdjustMethod = 'BH',pvalueCutoff = 0.05, qvalueCutoff = 0.2,keyType = 'SYMBOL')
+value = -log10(go24$qvalue[1:5])
+pdf("GO_C24.pdf",h=4,w=5)
+barplot(value, col="#FF6C91", horiz=TRUE, cex.names=0.8)
+dev.off()
+write.csv(go24, "GO_C24.csv")
+####################################################################################################################
+
+
+#vein C0 C4 C10 C12 C14 C16
+####################################################################################################################
+c0=data[data$cluster==0,]
+go0=enrichGO(c0$gene, OrgDb = org.Hs.eg.db, ont='ALL',pAdjustMethod = 'BH',pvalueCutoff = 0.05, qvalueCutoff = 0.2,keyType = 'SYMBOL')
+value = -log10(go0$qvalue[c(2,8,11,12,15)])
+pdf("GO_C0.pdf",h=4,w=5)
+barplot(value, col="#F8766D", horiz=TRUE, cex.names=0.8)
+dev.off()
+write.csv(go0, "GO_C0.csv")
+
+c4=data[data$cluster==4,]
+go4=enrichGO(c4$gene, OrgDb = org.Hs.eg.db, ont='ALL',pAdjustMethod = 'BH',pvalueCutoff = 0.05, qvalueCutoff = 0.2,keyType = 'SYMBOL')
+value = -log10(go4$qvalue[c(2,3,10,11,12)])
+pdf("GO_C4_2.pdf",h=4,w=5)
+barplot(value, col="#BB9D00", horiz=TRUE, cex.names=0.8)
+dev.off()
+write.csv(go4, "GO_C4.csv")
+
+c10=data[data$cluster==10,]
+go10=enrichGO(c10$gene, OrgDb = org.Hs.eg.db, ont='ALL',pAdjustMethod = 'BH',pvalueCutoff = 0.05, qvalueCutoff = 0.2,keyType = 'SYMBOL')
+value = -log10(go10$qvalue[c(1,4,5,6,13)])
+pdf("GO_C10_2.pdf",h=4,w=5)
+barplot(value, col="#00BF7D", horiz=TRUE, cex.names=0.8)
+dev.off()
+write.csv(go10, "GO_C10.csv")
+
+c12=data[data$cluster==12,]
+go12=enrichGO(c12$gene, OrgDb = org.Hs.eg.db, ont='ALL',pAdjustMethod = 'BH',pvalueCutoff = 0.05, qvalueCutoff = 0.2,keyType = 'SYMBOL')
+value = -log10(go12$qvalue[c(3,13,26,28,29)])
+pdf("GO_C12_2.pdf",h=4,w=5)
+barplot(value, col="#00C0B8", horiz=TRUE, cex.names=0.8)
+dev.off()
+write.csv(go12, "GO_C12.csv")
+
+c14=data[data$cluster==14,]
+go14=enrichGO(c14$gene, OrgDb = org.Hs.eg.db, ont='ALL',pAdjustMethod = 'BH',pvalueCutoff = 0.05, qvalueCutoff = 0.2,keyType = 'SYMBOL')
+value = -log10(go14$qvalue[1:5])
+pdf("GO_C14.pdf",h=4,w=5)
+barplot(value, col="#00B8E5", horiz=TRUE, cex.names=0.8)
+dev.off()
+write.csv(go14, "GO_C14.csv")
+
+c16=data[data$cluster==16,]
+go16=enrichGO(c16$gene, OrgDb = org.Hs.eg.db, ont='ALL',pAdjustMethod = 'BH',pvalueCutoff = 0.05, qvalueCutoff = 0.2,keyType = 'SYMBOL')
+value = -log10(go16$qvalue[1:5])
+pdf("GO_C16.pdf",h=4,w=5)
+barplot(value, col="#03A5FF", horiz=TRUE, cex.names=0.8)
+dev.off()
+write.csv(go16, "GO_C16.csv")
+####################################################################################################################
+
+#ProfEC, C2, C8, C9
+####################################################################################################################
+c2=data[data$cluster==2,]
+go2=enrichGO(c2$gene, OrgDb = org.Hs.eg.db, ont='ALL',pAdjustMethod = 'BH',pvalueCutoff = 0.05, qvalueCutoff = 0.2,keyType = 'SYMBOL')
+value = -log10(go2$qvalue[1:5])
+pdf("GO_C2.pdf",h=4,w=5)
+barplot(value, col="#E08B00", horiz=TRUE, cex.names=0.8)
+dev.off()
+write.csv(go2, "GO_C2.csv")
+
+c8=data[data$cluster==8,]
+go8=enrichGO(c8$gene, OrgDb = org.Hs.eg.db, ont='ALL',pAdjustMethod = 'BH',pvalueCutoff = 0.05, qvalueCutoff = 0.2,keyType = 'SYMBOL')
+value = -log10(go8$qvalue[1:5])
+pdf("GO_C8.pdf",h=4,w=5)
+barplot(value, col="#00B81F", horiz=TRUE, cex.names=0.8)
+dev.off()
+write.csv(go8, "GO_C8.csv")
+
+c9=data[data$cluster==9,]
+go9=enrichGO(c9$gene, OrgDb = org.Hs.eg.db, ont='ALL',pAdjustMethod = 'BH',pvalueCutoff = 0.05, qvalueCutoff = 0.2,keyType = 'SYMBOL')
+value = -log10(go9$qvalue[1:5])
+pdf("GO_C9.pdf",h=4,w=5)
+barplot(value, col="#00BC59", horiz=TRUE, cex.names=0.8)
+dev.off()
+write.csv(go9, "GO_C9.csv")
+####################################################################################################################
+
